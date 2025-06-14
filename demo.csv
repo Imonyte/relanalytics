@@ -1,0 +1,6 @@
+timestamp,event,distance,label
+08:00,pedestrian,4.2,crosswalk A
+08:01,pedestrian,3.9,crosswalk A
+08:02,car,7.1,zone 1
+08:03,pedestrian,2.8,crosswalk B
+08:04,pedestrian,1.6,crosswalk B
