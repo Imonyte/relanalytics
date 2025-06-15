@@ -1,6 +1,8 @@
 streamlit
 pandas
 matplotlib
-seaborn
+plotly
 numpy
-Pillow
+kaleido
+imageio
+tqdm

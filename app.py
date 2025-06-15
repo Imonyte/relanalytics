@@ -1,107 +1,134 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
-from PIL import Image
-from io import StringIO
-from rela_core import run_rela_pipeline
+import os
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
-# Set up page
-st.set_page_config(page_title="RELAnalytics", layout="centered")
+from rela_core import compute_voltage, compute_semantic_current, assign_modulus
 
+# Page config
+st.set_page_config(layout="wide", page_title="RELAnalytics")
+
+# Branding
 st.title("🌀 RELAnalytics")
-# Load and display the logo
-logo = Image.open("relanalytics_logo.png")
-st.image(logo, width=220)
+st.image("relanalytics_logo.png", use_column_width=True)
+st.markdown("**Recursive Entangled Logic Engine for Semantic Fields**")
 
-# Branding welcome message
-st.markdown("## 🔍 Welcome to RELAnalytics")
-st.markdown("""
-**RELAnalytics** is a recursive-entangled logic field platform  
-designed to extract meaning from structured spatial-semantic data.
+# Sidebar controls
+st.sidebar.header("📂 Load Data")
+uploaded_file = st.sidebar.file_uploader("Upload a CSV file", type="csv")
+load_demo = st.sidebar.button("🧪 Load Recursive Demo")
 
-Upload your CSV to begin analyzing recursive voltage fields, semantic current,  
-and modulus-phase rings in real time.
-""")
-st.subheader("Recursive Entangled Logic Field Visualizer")
-st.markdown("Upload a CSV with at least `distance` and `label` columns.")
+view_mode = st.sidebar.radio("🔁 View Mode", ["Line View", "Spiral 2D", "Spiral 3D"])
+mod_min = st.sidebar.slider("Min Modulus", 0, 10000, 0)
+mod_max = st.sidebar.slider("Max Modulus", 100, 10000, 10000)
 
-uploaded_file = st.file_uploader("📂 Upload your CSV file", type="csv")
+df = None
 
-if uploaded_file is not None:
-    try:
-        # Run RELA logic
-        df = run_rela_pipeline(uploaded_file)
-        st.success("✅ Data processed with RELA core logic.")
+# Load data
+if load_demo:
+    demo_path = "recursive_field_demo.csv"
+    if os.path.exists(demo_path):
+        df = pd.read_csv(demo_path)
+        st.success("✅ Loaded recursive demo dataset.")
+    else:
+        st.error("❌ Demo file not found.")
+elif uploaded_file:
+    df = pd.read_csv(uploaded_file)
+    st.success("✅ File uploaded successfully.")
 
-        # Filter by label
-        unique_labels = df['label'].unique()
-        selected_labels = st.multiselect("🔍 Filter by label:", unique_labels, default=list(unique_labels))
-        filtered_df = df[df['label'].isin(selected_labels)]
+# Processing logic
+if df is not None:
+    if "distance" in df.columns and "label" in df.columns:
 
-        st.markdown("### 🔍 Filtered RELA Data Preview:")
-        st.dataframe(filtered_df.head(10))
+        # RELA core fields
+        df["voltage"] = df["distance"].apply(compute_voltage)
+        df["modulus"] = df["label"].apply(assign_modulus)
+        df["semantic_current"] = compute_semantic_current(df["voltage"])
 
-        # 📊 Summary Metrics
-        if not filtered_df.empty:
-            col1, col2, col3 = st.columns(3)
-            col1.metric("⚡ Avg Voltage", f"{filtered_df['voltage'].mean():.2f} V")
-            col2.metric("ΔV (Peak)", f"{filtered_df['semantic_current'].max():.2f}")
-            col3.metric("🌀 Phases", f"{filtered_df['modulus'].nunique()}")
-        else:
-            st.warning("No data to summarize — please check your filters or CSV.")
+        # Filter by modulus range
+        df = df[(df["modulus"] >= mod_min) & (df["modulus"] <= mod_max)]
 
-        # 📈 Voltage over Time
-        st.markdown("### ⚡ Voltage Over Time")
-        fig1, ax1 = plt.subplots()
-        ax1.plot(filtered_df.index, filtered_df['voltage'], label='Voltage', color='blue')
-        ax1.set_ylabel("Voltage (V)")
-        ax1.set_xlabel("Time Index")
-        ax1.legend()
-        st.pyplot(fig1)
+        # Metrics
+        st.subheader("📊 RELAnalytics Metrics")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Rows", len(df))
+        col2.metric("Unique Labels", df['label'].nunique())
+        col3.metric("ΔV Average", round(df["semantic_current"].abs().mean(), 5))
 
-        # 🧠 Semantic Current (ΔV)
-        st.markdown("### 🧠 Semantic Current (ΔV)")
-        fig2, ax2 = plt.subplots()
-        sns.lineplot(x=filtered_df.index, y=filtered_df['semantic_current'], ax=ax2, color='orange')
-        ax2.set_ylabel("Current")
-        ax2.set_xlabel("Time Index")
-        st.pyplot(fig2)
+        # Visualization
+        if view_mode == "Line View":
+            st.line_chart(df[["voltage", "semantic_current"]])
+            st.bar_chart(df["modulus"])
 
-        # 🌀 Phase Ring Mapping
-        st.markdown("### 🌀 Phase Ring Mapping")
-        st.bar_chart(filtered_df['modulus'])
+        elif view_mode == "Spiral 2D":
+            st.subheader("🌐 Spiral Voltage Field (2D)")
+            fig = plt.figure(figsize=(7, 7))
+            ax = fig.add_subplot(111, polar=True)
 
-        # 🌌 Semantic Spiral
-        st.markdown("### 🌌 Semantic Spiral of Voltage-Phase Field")
-        try:
-            spiral_df = filtered_df.copy()
-            angles = np.linspace(0, 2 * np.pi, len(spiral_df))
-            radius = spiral_df['voltage']
+            theta = np.linspace(0, 2 * np.pi, len(df))
+            radius = df["voltage"]
+            colors = df["modulus"]
 
-            fig_spiral = plt.figure(figsize=(6, 6))
-            ax = fig_spiral.add_subplot(111, polar=True)
-            ax.plot(angles, radius, marker='o', color='purple', linewidth=2)
-            ax.set_title("Semantic Spiral: Voltage Resonance Field", va='bottom')
-            st.pyplot(fig_spiral)
-        except Exception as spiral_error:
-            st.warning(f"⚠️ Spiral could not be plotted: {spiral_error}")
+            scatter = ax.scatter(theta, radius, c=colors, cmap='plasma', s=30, alpha=0.9)
+            cbar = fig.colorbar(scatter, ax=ax, orientation='vertical', pad=0.1)
+            cbar.set_label('Modulus (Phase)')
 
-        # 💾 Download CSV
-        csv_data = filtered_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="💾 Download Processed CSV",
-            data=csv_data,
-            file_name='rela_processed.csv',
-            mime='text/csv'
-        )
+            harmonic_rings = [100, 500, 1000, 5000, 10000]
+            for hr in harmonic_rings:
+                ring_r = 1 / (hr + 0.1)
+                ax.plot(np.linspace(0, 2*np.pi, 200), [ring_r]*200, '--', color='grey', linewidth=0.7, alpha=0.6)
+                ax.text(0, ring_r + 0.002, f'{hr}', fontsize=8, ha='center', color='grey')
 
-        # 🔗 Placeholder: Real-Time Data Integration
-        st.markdown("### 🔌 Live Sensor API Integration")
-        st.info("This module is ready to connect to camera/LiDAR or traffic APIs. Future builds will include stream-based ingestion.")
+            ax.set_title("Recursive Spiral Voltage Field", va='bottom')
+            st.pyplot(fig)
 
-    except Exception as e:
-        st.error(f"⚠️ Error: {e}")
+        elif view_mode == "Spiral 3D":
+            st.subheader("🔺 3D Spiral Voltage Field")
+
+            theta = np.linspace(0, 4 * np.pi, len(df))
+            r = df["voltage"]
+            z = df["semantic_current"]
+            color = df["modulus"]
+
+            x = r * np.cos(theta)
+            y = r * np.sin(theta)
+
+            fig = go.Figure(data=go.Scatter3d(
+                x=x, y=y, z=z,
+                mode='markers+lines',
+                marker=dict(
+                    size=4,
+                    color=color,
+                    colorscale='Viridis',
+                    colorbar=dict(title="Modulus"),
+                    opacity=0.8
+                ),
+                line=dict(color='rgba(50,50,200,0.2)', width=1)
+            ))
+
+            fig.update_layout(
+                height=700,
+                margin=dict(l=0, r=0, b=0, t=30),
+                scene=dict(
+                    xaxis_title='X (cos θ)',
+                    yaxis_title='Y (sin θ)',
+                    zaxis_title='ΔV (Semantic Current)',
+                    bgcolor='white'
+                ),
+                title="Recursive 3D Spiral View"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Show data table
+        st.dataframe(df.head(30))
+
+        # Download processed data
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("⬇️ Download Processed CSV", csv, "processed_data.csv", "text/csv")
+
+    else:
+        st.warning("⚠️ CSV must contain 'distance' and 'label' columns.")
 else:
-    st.warning("📎 Please upload a CSV file to begin analysis.")
+    st.info("Upload a file or click 'Load Recursive Demo' to begin.")
