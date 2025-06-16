@@ -1,8 +1,8 @@
 streamlit
 pandas
+numpy
 matplotlib
 plotly
-numpy
-kaleido
 imageio
+kaleido
 tqdm
